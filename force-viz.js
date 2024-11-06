@@ -1,19 +1,15 @@
-const page_urls = [
-    'pages/0e5a7fef-7bc9-4ab2-bc86-1d8f37de0bef.md',
-    'pages/6ceaa7df-af2f-44da-9e87-8df9319c2355.md',
-    'pages/0085c6c1-014b-4fe7-bbf7-9b1be7f8e8c0.md',
-    'pages/445a3f0e-642a-431c-9b7c-ea973504f06a.md',
-    'pages/9844fcce-0124-48ab-ad38-374b4c8f05b8.md',
-    'pages/a4bed5e5-435c-4de2-82e4-4f5f1d92bbf6.md',
-    'pages/ba215ee5-cadd-421b-8026-7c15b19310d0.md',
-    'pages/ccb5c70d-569d-4ef1-baa9-5add76cae8b9.md',
-    'pages/f90dffde-6359-4f65-b4f4-3941f7662bdc.md'
-  ];
-  
+
   async function fetchAllPages() {
+      const response = await fetch('pages/index.json');
+      const page_urls = await response.json();
+      return page_urls;
+  }
+  
+  
+  async function fetchAllPageContents(page_urls) {
     const allContents = [];
     for (const page_url of page_urls) {
-      const res = await fetch(page_url);
+      const res = await fetch(`pages/${page_url}`);
       const json = await res.json();
       const x = Math.random() * 1000;
       const y = Math.random() * 1000;
@@ -25,7 +21,7 @@ const page_urls = [
     }
     return allContents;
   }
-  
+
   function setupSimulation(content) {
     const svg = d3.select("svg")
       .call(d3.zoom().on("zoom", zoomed));
@@ -99,7 +95,8 @@ const page_urls = [
   }
   
   async function main() {
-    const content = await fetchAllPages();
+    const page_urls = await fetchAllPages();
+    const content = await fetchAllPageContents(page_urls);
     console.log(content);
     setupSimulation(content);
   }
