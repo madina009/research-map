@@ -11,7 +11,7 @@
 Install the required packages using pip:
 
 ```bash
-pip install python-dotenv requests
+pip3 install python-dotenv requests
 ```
 
 ## Usage
