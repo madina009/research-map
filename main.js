@@ -52,7 +52,7 @@ scene.add(light3);
 // const gridHelper = new THREE.GridHelper(100, 100);
 // scene.add(gridHelper);
 
-const sphereRadius = 5;
+const sphereRadius = 10;
 
 const sphereGeometry = new THREE.SphereGeometry(sphereRadius + 0.1, 32, 32);
 const sphereMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, wireframe: true });
