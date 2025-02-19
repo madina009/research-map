@@ -2,3 +2,4 @@
 images/
 pages/
 .DS_Store
+node_modules/

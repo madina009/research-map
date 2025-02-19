@@ -1,0 +1,23 @@
+{
+  "name": "notion-api",
+  "version": "1.0.0",
+  "description": "## Requirements",
+  "main": "embed-images.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/madina009/research-map.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/madina009/research-map/issues"
+  },
+  "homepage": "https://github.com/madina009/research-map#readme",
+  "dependencies": {
+    "@xenova/transformers": "^2.17.2"
+  }
+}
