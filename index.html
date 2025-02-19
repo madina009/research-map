@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="https://unpkg.com/umap-js@1.3.3/lib/umap-js.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/seedrandom/3.0.5/seedrandom.min.js"></script>
+    <script type="importmap">
+        {
+          "imports": {
+            "three": "https://unpkg.com/three@0.159.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.159.0/examples/jsm/",
+            "troika-three-text": "https://unpkg.com/troika-three-text@0.49.0/dist/troika-three-text.esm.js",
+            "troika-worker-utils": "https://unpkg.com/troika-worker-utils@0.49.0/dist/troika-worker-utils.esm.js",
+            "troika-three-utils": "https://unpkg.com/troika-three-utils@0.49.0/dist/troika-three-utils.esm.js",
+            "webgl-sdf-generator": "https://unpkg.com/webgl-sdf-generator@1.1.1/dist/webgl-sdf-generator.mjs",
+            "bidi-js": "https://unpkg.com/bidi-js@1.0.3/dist/bidi.mjs"
+          }
+        }
+    </script>
+
+    <script type="module" src="main.js"></script>
+</body>
+
+</html>
