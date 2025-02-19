@@ -45,24 +45,22 @@ const light3 = new THREE.DirectionalLight(0xffffff, 3);
 light3.position.set(-100, -200, -100);
 scene.add(light3);
 
-const lightHelper = new THREE.DirectionalLightHelper(light2, 5);
-scene.add(lightHelper);
+// const lightHelper = new THREE.DirectionalLightHelper(light2, 5);
+// scene.add(lightHelper);
 
 //GRID SIZE
-const gridHelper = new THREE.GridHelper(100, 100);
-scene.add(gridHelper);
+// const gridHelper = new THREE.GridHelper(100, 100);
+// scene.add(gridHelper);
+
+const sphereRadius = 5;
+
+const sphereGeometry = new THREE.SphereGeometry(sphereRadius + 0.1, 32, 32);
+const sphereMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, wireframe: true });
+const sphereMesh = new THREE.Mesh(sphereGeometry, sphereMaterial);
+scene.add(sphereMesh);
 
 const imagesGroup = new THREE.Group();
 scene.add(imagesGroup);
-
-//adding a cube
-const geometry = new THREE.TorusKnotGeometry(1.5, 0.3, 200, 32).toNonIndexed();
-const material = new THREE.MeshStandardMaterial({
-  color: 0x00ff00,
-  roughness: 0.2,
-});
-const cube = new THREE.Mesh(geometry, material);
-scene.add(cube);
 
 camera.position.z = 5;
 
@@ -71,12 +69,13 @@ function map(v, inMin, inMax, outMin, outMax) {
 }
 
 function updatePositions(projections, group, groupOffset = 0) {
+  // debugger;
   const minX = Math.min(...projections.map((p) => p[0]));
   const maxX = Math.max(...projections.map((p) => p[0]));
   const minY = Math.min(...projections.map((p) => p[1]));
   const maxY = Math.max(...projections.map((p) => p[1]));
-  const minZ = Math.min(...projections.map((p) => p[2]));
-  const maxZ = Math.max(...projections.map((p) => p[2]));
+  // const minZ = Math.min(...projections.map((p) => p[2]));
+  // const maxZ = Math.max(...projections.map((p) => p[2]));
 
   //SCENE SIZE
 
@@ -84,27 +83,39 @@ function updatePositions(projections, group, groupOffset = 0) {
 
   for (let i = 0; i < projections.length; i++) {
     const image = group.children[i + groupOffset];
-    image.position.x = map(
+    const x = map(
       projections[i][0],
       minX,
       maxX,
       -sceneSize,
       sceneSize
     );
-    image.position.y = map(
+    const y = map(
       projections[i][1],
       minY,
       maxY,
       -sceneSize,
       sceneSize
     );
-    image.position.z = map(
-      projections[i][2],
-      minZ,
-      maxZ,
-      -sceneSize,
-      sceneSize
-    );
+    
+    const phi = (x / sceneSize) * Math.PI;
+    const theta = (y / sceneSize) * Math.PI;
+    image.position.x = sphereRadius * Math.sin(theta) * Math.cos(phi);
+    image.position.y = sphereRadius * Math.sin(theta) * Math.sin(phi);
+    image.position.z = sphereRadius * Math.cos(theta);
+    image.lookAt(0, 0, 0);
+
+
+
+    // image.position.x = 
+    // image.position.y = 
+    // image.position.z = map(
+    //   projections[i][2],
+    //   minZ,
+    //   maxZ,
+    //   -sceneSize,
+    //   sceneSize
+    // );
   }
 }
 
@@ -166,7 +177,7 @@ async function load() {
   umap = new UMAP({
     nNeighbors: 15,
     minDist: 0.1,
-    nComponents: 3,
+    nComponents: 2,
   });
   nEpochs = umap.initializeFit(allEmbeds.map((e) => e.embed));
 
@@ -185,7 +196,7 @@ async function load() {
 
     mesh.position.x = Math.random() * 10 - 5;
     mesh.position.y = Math.random() * 10 - 5;
-    mesh.position.z = Math.random() * 10 - 5;
+    // mesh.position.z = Math.random() * 10 - 5;
     imagesGroup.add(mesh);
   }
   // for (const text of textEmbeds) {
