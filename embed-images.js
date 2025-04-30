@@ -1,17 +1,9 @@
-import {
-  AutoProcessor,
-  CLIPVisionModelWithProjection,
-  RawImage,
-} from "@xenova/transformers";
+import { AutoProcessor, CLIPVisionModelWithProjection, RawImage } from "@xenova/transformers";
 import * as fs from "fs/promises";
 
-const processor = await AutoProcessor.from_pretrained(
-  "Xenova/clip-vit-base-patch16"
-);
+const processor = await AutoProcessor.from_pretrained("Xenova/clip-vit-base-patch16");
 
-let vision_model = await CLIPVisionModelWithProjection.from_pretrained(
-  "Xenova/clip-vit-base-patch16"
-);
+let vision_model = await CLIPVisionModelWithProjection.from_pretrained("Xenova/clip-vit-base-patch16");
 
 const pages = await fs.readdir("pages");
 
@@ -27,24 +19,24 @@ for (const filename of pages) {
     const { filename } = block;
     const url = `images/${filename}`;
     console.log(url);
-    let image = await RawImage.read(url);
-    let image_inputs = await processor(image);
-    let { image_embeds } = await vision_model(image_inputs);
-    let embedArray = Array.from(image_embeds.data);
-    // console.log('title', page.title);
-    embeds.push({
-      filename,
-      title: page.title,
-      tags: page.tags,
-      width: image.width,
-      height: image.height,
-      embed: embedArray,
-    });
-
+    const extension = filename.split(".").pop().toLowerCase();
+    if (["jpg", "jpeg", "png", "gif"].includes(extension)) {
+      let image = await RawImage.read(url);
+      let image_inputs = await processor(image);
+      let { image_embeds } = await vision_model(image_inputs);
+      let embedArray = Array.from(image_embeds.data);
+      // console.log('title', page.title);
+      embeds.push({
+        filename,
+        title: page.title,
+        tags: page.tags,
+        width: image.width,
+        height: image.height,
+        embed: embedArray,
+      });
+    }
   }
-
 }
-
 
 await fs.writeFile("image_embeds.json", JSON.stringify(embeds));
 
