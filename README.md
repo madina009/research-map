@@ -21,3 +21,9 @@ Run the script to download the database:
 ```bash
 python3 download-database.py
 ```
+
+To embed the images run the embed script in node.js
+
+```bash
+node embed-images.js
+```

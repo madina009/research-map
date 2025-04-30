@@ -15,37 +15,32 @@ document.body.appendChild(renderer.domElement);
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 
 const scene = new THREE.Scene();
-scene.environment = pmremGenerator.fromScene(
-  new RoomEnvironment(),
-  0.04
-).texture;
-const camera = new THREE.PerspectiveCamera(
-  75,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  1000
-);
+// scene.environment = pmremGenerator.fromScene(
+//   new RoomEnvironment(),
+//   0.04
+// ).texture;
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 
 // Lights
 
-const ambientLight = new THREE.AmbientLight(0x000000);
+const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
 scene.add(ambientLight);
 
-const light1 = new THREE.DirectionalLight(0xffffff, 3);
-light1.position.set(0, 200, 0);
+const light1 = new THREE.DirectionalLight(0xffffff, 1);
+light1.position.set(100, 200, 0);
 scene.add(light1);
 
-const light2 = new THREE.DirectionalLight(0xffffff, 3);
-light2.position.set(100, 200, 100);
-scene.add(light2);
+// const light2 = new THREE.DirectionalLight(0xffffff, 3);
+// light2.position.set(100, 200, 100);
+// scene.add(light2);
 
-const light3 = new THREE.DirectionalLight(0xffffff, 3);
-light3.position.set(-100, -200, -100);
-scene.add(light3);
+// const light3 = new THREE.DirectionalLight(0xffffff, 3);
+// light3.position.set(-100, -200, -100);
+// scene.add(light3);
 
-// const lightHelper = new THREE.DirectionalLightHelper(light2, 5);
+// const lightHelper = new THREE.DirectionalLightHelper(light1, 5);
 // scene.add(lightHelper);
 
 //GRID SIZE
@@ -74,6 +69,11 @@ function updatePositions(projections, group, groupOffset = 0) {
   const maxX = Math.max(...projections.map((p) => p[0]));
   const minY = Math.min(...projections.map((p) => p[1]));
   const maxY = Math.max(...projections.map((p) => p[1]));
+  // console.log({ minX, maxX, minY, maxY });
+  // const minX = -13.385554092682291,
+  //   maxX = 7.050034928767373,
+  //   minY = -21.19098632956683,
+  //   maxY = 10.810384338097796;
   // const minZ = Math.min(...projections.map((p) => p[2]));
   // const maxZ = Math.max(...projections.map((p) => p[2]));
 
@@ -83,21 +83,9 @@ function updatePositions(projections, group, groupOffset = 0) {
 
   for (let i = 0; i < projections.length; i++) {
     const image = group.children[i + groupOffset];
-    const x = map(
-      projections[i][0],
-      minX,
-      maxX,
-      -sceneSize,
-      sceneSize
-    );
-    const y = map(
-      projections[i][1],
-      minY,
-      maxY,
-      -sceneSize,
-      sceneSize
-    );
-    
+    const x = map(projections[i][0], minX, maxX, -sceneSize, sceneSize);
+    const y = map(projections[i][1], minY, maxY, -sceneSize, sceneSize);
+
     const phi = (x / sceneSize) * Math.PI;
     const theta = (y / sceneSize) * Math.PI;
     image.position.x = sphereRadius * Math.sin(theta) * Math.cos(phi);
@@ -105,10 +93,8 @@ function updatePositions(projections, group, groupOffset = 0) {
     image.position.z = sphereRadius * Math.cos(theta);
     image.lookAt(0, 0, 0);
 
-
-
-    // image.position.x = 
-    // image.position.y = 
+    // image.position.x =
+    // image.position.y =
     // image.position.z = map(
     //   projections[i][2],
     //   minZ,
@@ -175,8 +161,8 @@ async function load() {
   firstTextIndex = imageEmbeds.length;
 
   umap = new UMAP({
-    nNeighbors: 15,
-    minDist: 0.1,
+    nNeighbors: 10,
+    minDist: 0.01,
     nComponents: 2,
   });
   nEpochs = umap.initializeFit(allEmbeds.map((e) => e.embed));
@@ -188,11 +174,16 @@ async function load() {
       color: 0xffffff,
       side: THREE.DoubleSide,
     });
+    // const planeMat = new THREE.MeshBasicMaterial({
+    //   color: 0xffffff,
+    //   side: THREE.DoubleSide,
+    // });
+
     planeMat.map = textureLoader.load(`images/${image.filename}`);
     const mesh = new THREE.Mesh(planeGeo, planeMat);
-    const aspect = image.width / image.height;
-    mesh.scale.y = 1.0;
-    mesh.scale.x = mesh.scale.y * aspect;
+    const aspect = image.height / image.width;
+    mesh.scale.x = 2.0;
+    mesh.scale.y = mesh.scale.x * aspect;
 
     mesh.position.x = Math.random() * 10 - 5;
     mesh.position.y = Math.random() * 10 - 5;
