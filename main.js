@@ -128,7 +128,8 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-
+controls.enableDamping = true;
+controls.dampingFactor = 0.15;
 // Lights
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
@@ -188,6 +189,8 @@ function animate() {
   const layoutAlgorithm = layoutAlgorithms[layoutMode];
   layoutAlgorithm.step();
   layoutAlgorithm.layout(imagesGroup);
+
+  controls.update();
 
   renderer.render(scene, camera);
 }
