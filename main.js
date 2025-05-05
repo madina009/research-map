@@ -56,6 +56,7 @@ class UMAPLayoutAlgorithm {
 
 class ForceLayoutAlgorithm {
   constructor(images) {
+    this.simExtent = 20;
     // Group by name to get all clusters of pages
     this.groups = {};
     for (const image of images) {
@@ -65,11 +66,11 @@ class ForceLayoutAlgorithm {
       this.groups[image.title].push(image);
     }
     this.groups = Object.values(this.groups);
-    const inputSize = 5;
 
-    this.clusterCentres = this.groups.map(() => {
-      return { x: (Math.random() - 0.5) * inputSize, y: (Math.random() - 0.5) * inputSize };
-    });
+    this.clusterCentres = this.groups.map(() => ({
+      x: (Math.random() - 0.5) * 2 * this.simExtent,
+      y: (Math.random() - 0.5) * 2 * this.simExtent,
+    }));
 
     for (let gi = 0; gi < this.groups.length; gi++) {
       const { x: cx, y: cy } = this.clusterCentres[gi];
@@ -86,7 +87,7 @@ class ForceLayoutAlgorithm {
       .force("x", d3.forceX((d) => this.clusterCentres[d.cluster].x).strength(0.5))
       .force("y", d3.forceY((d) => this.clusterCentres[d.cluster].y).strength(0.5))
       .force("charge", d3.forceManyBody().strength(-0.05)) // global repulsion
-      .force("collision", d3.forceCollide().radius(0.05)) // prevent overlaps
+      .force("collision", d3.forceCollide().radius(0.3)) // prevent overlaps
       .alphaDecay(0.03) // optional: faster settle
       .stop();
   }
@@ -94,20 +95,21 @@ class ForceLayoutAlgorithm {
     this.simulation.tick();
   }
   layout(group) {
-    const positions = this.simulation.nodes();
-    for (let i = 0; i < positions.length; i++) {
-      const image = group.children[i];
-      const inputSize = 5;
-      const sceneSize = 20;
-      const x = map(positions[i].x, -inputSize, inputSize, -sceneSize, sceneSize);
-      const y = map(positions[i].y, -inputSize, inputSize, -sceneSize, sceneSize);
+    const nodes = this.simulation.nodes();
+    for (let i = 0; i < nodes.length; i++) {
+      const img = group.children[i];
+      const nx = nodes[i].x; //   range  ~  [‑simExtent,+simExtent]
+      const ny = nodes[i].y;
 
-      const phi = (x / sceneSize) * Math.PI;
-      const theta = (y / sceneSize) * Math.PI;
-      image.position.x = sphereRadius * Math.sin(theta) * Math.cos(phi);
-      image.position.y = sphereRadius * Math.sin(theta) * Math.sin(phi);
-      image.position.z = sphereRadius * Math.cos(theta);
-      image.lookAt(0, 0, 0);
+      const phi = (nx / this.simExtent) * Math.PI * 2; //   [‑π, +π]
+      const theta = (ny / this.simExtent) * Math.PI * 2; //   [‑π, +π]  (use π/2 if you want poles at ±simExtent)
+
+      img.position.set(
+        sphereRadius * Math.sin(theta) * Math.cos(phi),
+        sphereRadius * Math.sin(theta) * Math.sin(phi),
+        sphereRadius * Math.cos(theta)
+      );
+      img.lookAt(0, 0, 0);
     }
   }
 }
