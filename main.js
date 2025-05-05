@@ -4,7 +4,7 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { Text } from "troika-three-text";
 
 // Either "umap" or "force"
-let layoutMode = "umap";
+let layoutMode = "force";
 
 const layoutAlgorithms = {};
 
@@ -43,6 +43,64 @@ class UMAPLayoutAlgorithm {
       const image = group.children[i];
       const x = map(projections[i][0], minX, maxX, -sceneSize, sceneSize);
       const y = map(projections[i][1], minY, maxY, -sceneSize, sceneSize);
+
+      const phi = (x / sceneSize) * Math.PI;
+      const theta = (y / sceneSize) * Math.PI;
+      image.position.x = sphereRadius * Math.sin(theta) * Math.cos(phi);
+      image.position.y = sphereRadius * Math.sin(theta) * Math.sin(phi);
+      image.position.z = sphereRadius * Math.cos(theta);
+      image.lookAt(0, 0, 0);
+    }
+  }
+}
+
+class ForceLayoutAlgorithm {
+  constructor(images) {
+    // Group by name to get all clusters of pages
+    this.groups = {};
+    for (const image of images) {
+      if (!this.groups[image.title]) {
+        this.groups[image.title] = [];
+      }
+      this.groups[image.title].push(image);
+    }
+    this.groups = Object.values(this.groups);
+    const inputSize = 5;
+
+    this.clusterCentres = this.groups.map(() => {
+      return { x: (Math.random() - 0.5) * inputSize, y: (Math.random() - 0.5) * inputSize };
+    });
+
+    for (let gi = 0; gi < this.groups.length; gi++) {
+      const { x: cx, y: cy } = this.clusterCentres[gi];
+      for (const img of this.groups[gi]) {
+        img.cluster = gi; // accessor key
+        img.x = cx + (Math.random() - 0.01); // initial x/y for D3
+        img.y = cy + (Math.random() - 0.01);
+      }
+    }
+
+    // Initialize the simulation
+    this.simulation = d3
+      .forceSimulation(images)
+      .force("x", d3.forceX((d) => this.clusterCentres[d.cluster].x).strength(0.5))
+      .force("y", d3.forceY((d) => this.clusterCentres[d.cluster].y).strength(0.5))
+      .force("charge", d3.forceManyBody().strength(-0.05)) // global repulsion
+      .force("collision", d3.forceCollide().radius(0.05)) // prevent overlaps
+      .alphaDecay(0.03) // optional: faster settle
+      .stop();
+  }
+  step() {
+    this.simulation.tick();
+  }
+  layout(group) {
+    const positions = this.simulation.nodes();
+    for (let i = 0; i < positions.length; i++) {
+      const image = group.children[i];
+      const inputSize = 5;
+      const sceneSize = 20;
+      const x = map(positions[i].x, -inputSize, inputSize, -sceneSize, sceneSize);
+      const y = map(positions[i].y, -inputSize, inputSize, -sceneSize, sceneSize);
 
       const phi = (x / sceneSize) * Math.PI;
       const theta = (y / sceneSize) * Math.PI;
@@ -137,6 +195,7 @@ async function load() {
   const imageEmbeds = await imageRes.json();
 
   layoutAlgorithms["umap"] = new UMAPLayoutAlgorithm(imageEmbeds);
+  layoutAlgorithms["force"] = new ForceLayoutAlgorithm(imageEmbeds);
 
   const textureLoader = new THREE.TextureLoader();
   for (const image of imageEmbeds) {
