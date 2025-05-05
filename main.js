@@ -3,10 +3,56 @@ import { OrbitControls } from "three/addons/controls/OrbitControls";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { Text } from "troika-three-text";
 
-let umap;
-let nEpochs;
-let done = false;
-let firstTextIndex = 0;
+// Either "umap" or "force"
+let layoutMode = "umap";
+
+const layoutAlgorithms = {};
+
+class UMAPLayoutAlgorithm {
+  constructor(images) {
+    this.umap = null;
+    this.nEpochs = 0;
+    this.done = false;
+
+    this.umap = new UMAP({
+      nNeighbors: 10,
+      minDist: 0.01,
+      nComponents: 2,
+    });
+    this.nEpochs = this.umap.initializeFit(images.map((img) => img.embed));
+  }
+
+  step() {
+    if (this.umap.step() === this.nEpochs) {
+      this.done = true;
+    }
+    return this.umap.getEmbedding();
+  }
+
+  layout(group) {
+    const projections = this.umap.getEmbedding();
+
+    const minX = Math.min(...projections.map((p) => p[0]));
+    const maxX = Math.max(...projections.map((p) => p[0]));
+    const minY = Math.min(...projections.map((p) => p[1]));
+    const maxY = Math.max(...projections.map((p) => p[1]));
+
+    const sceneSize = 20;
+
+    for (let i = 0; i < projections.length; i++) {
+      const image = group.children[i];
+      const x = map(projections[i][0], minX, maxX, -sceneSize, sceneSize);
+      const y = map(projections[i][1], minY, maxY, -sceneSize, sceneSize);
+
+      const phi = (x / sceneSize) * Math.PI;
+      const theta = (y / sceneSize) * Math.PI;
+      image.position.x = sphereRadius * Math.sin(theta) * Math.cos(phi);
+      image.position.y = sphereRadius * Math.sin(theta) * Math.sin(phi);
+      image.position.z = sphereRadius * Math.cos(theta);
+      image.lookAt(0, 0, 0);
+    }
+  }
+}
 
 const renderer = new THREE.WebGLRenderer();
 // renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -63,48 +109,6 @@ function map(v, inMin, inMax, outMin, outMax) {
   return ((v - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
 }
 
-function updatePositions(projections, group, groupOffset = 0) {
-  // debugger;
-  const minX = Math.min(...projections.map((p) => p[0]));
-  const maxX = Math.max(...projections.map((p) => p[0]));
-  const minY = Math.min(...projections.map((p) => p[1]));
-  const maxY = Math.max(...projections.map((p) => p[1]));
-  // console.log({ minX, maxX, minY, maxY });
-  // const minX = -13.385554092682291,
-  //   maxX = 7.050034928767373,
-  //   minY = -21.19098632956683,
-  //   maxY = 10.810384338097796;
-  // const minZ = Math.min(...projections.map((p) => p[2]));
-  // const maxZ = Math.max(...projections.map((p) => p[2]));
-
-  //SCENE SIZE
-
-  const sceneSize = 20;
-
-  for (let i = 0; i < projections.length; i++) {
-    const image = group.children[i + groupOffset];
-    const x = map(projections[i][0], minX, maxX, -sceneSize, sceneSize);
-    const y = map(projections[i][1], minY, maxY, -sceneSize, sceneSize);
-
-    const phi = (x / sceneSize) * Math.PI;
-    const theta = (y / sceneSize) * Math.PI;
-    image.position.x = sphereRadius * Math.sin(theta) * Math.cos(phi);
-    image.position.y = sphereRadius * Math.sin(theta) * Math.sin(phi);
-    image.position.z = sphereRadius * Math.cos(theta);
-    image.lookAt(0, 0, 0);
-
-    // image.position.x =
-    // image.position.y =
-    // image.position.z = map(
-    //   projections[i][2],
-    //   minZ,
-    //   maxZ,
-    //   -sceneSize,
-    //   sceneSize
-    // );
-  }
-}
-
 function translateToCenter(group, startIndex, endIndex) {
   // Calculate centroid
   let centroid = new THREE.Vector3();
@@ -121,51 +125,18 @@ function translateToCenter(group, startIndex, endIndex) {
 function animate() {
   requestAnimationFrame(animate);
 
-  if (!done) {
-    umap.step();
-    if (umap.step() === nEpochs) {
-      done = true;
-    }
-    const projections = umap.getEmbedding();
-    // const imageProjections = projections.slice(0, firstTextIndex);
-    // const textProjections = projections.slice(firstTextIndex);
-    updatePositions(projections, imagesGroup, 0);
-    // translateToCenter(imagesGroup, 0, firstTextIndex);
-    // translateToCenter(imagesGroup, firstTextIndex, imagesGroup.children.length);
-    // Flip all of the text meshes
-    // for (let i = firstTextIndex; i < imagesGroup.children.length; i++) {
-    //   const obj = imagesGroup.children[i];
-    //   obj.position.x *= -1;
-    //   obj.position.y *= -1;
-    //   obj.position.z *= -1;
-    // }
-    // translateToCenter(imagesGroup, 0, imagesGroup.children.length);
-
-    // updatePositions(textProjections, imagesGroup, firstTextIndex);
-  }
-  //   console.log(projections);
+  const layoutAlgorithm = layoutAlgorithms[layoutMode];
+  layoutAlgorithm.step();
+  layoutAlgorithm.layout(imagesGroup);
 
   renderer.render(scene, camera);
 }
-// animate();
 
 async function load() {
   const imageRes = await fetch("image_embeds.json");
   const imageEmbeds = await imageRes.json();
 
-  // const textRes = await fetch("text_embeds.json");
-  // const textEmbeds = await textRes.json();
-
-  // const allEmbeds = [...imageEmbeds, ...textEmbeds];
-  const allEmbeds = [...imageEmbeds];
-  firstTextIndex = imageEmbeds.length;
-
-  umap = new UMAP({
-    nNeighbors: 10,
-    minDist: 0.01,
-    nComponents: 2,
-  });
-  nEpochs = umap.initializeFit(allEmbeds.map((e) => e.embed));
+  layoutAlgorithms["umap"] = new UMAPLayoutAlgorithm(imageEmbeds);
 
   const textureLoader = new THREE.TextureLoader();
   for (const image of imageEmbeds) {
