@@ -107,7 +107,7 @@ class ForceLayoutAlgorithm {
       img.position.set(
         sphereRadius * Math.sin(theta) * Math.cos(phi),
         sphereRadius * Math.sin(theta) * Math.sin(phi),
-        sphereRadius * Math.cos(theta)
+        sphereRadius * Math.cos(theta),
       );
       img.lookAt(0, 0, 0);
     }
@@ -214,7 +214,7 @@ async function load() {
     //   side: THREE.DoubleSide,
     // });
 
-    planeMat.map = textureLoader.load(`images/${image.filename}`);
+    planeMat.map = textureLoader.load(`images_resized/${image.filename}`);
     const mesh = new THREE.Mesh(planeGeo, planeMat);
     const aspect = image.height / image.width;
     mesh.scale.x = 2.0;
