@@ -1,5 +1,6 @@
 .env
 images/
+images_resized/
 pages/
 .DS_Store
 node_modules/
