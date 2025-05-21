@@ -30,19 +30,23 @@ for (const filename of pages) {
     console.log(url); // Logs the path to the .jpg file in images_resized
 
     // Determine the extension from the original filename to decide if we process it
-    let image = await RawImage.read(url); // Read the .jpg file
-    let image_inputs = await processor(image);
-    let { image_embeds } = await vision_model(image_inputs);
-    let embedArray = Array.from(image_embeds.data);
-    // console.log('title', page.title);
-    embeds.push({
-      filename: newFilename,
-      title: page.title,
-      tags: page.tags,
-      width: image.width,
-      height: image.height,
-      embed: embedArray,
-    });
+    try {
+      let image = await RawImage.read(url); // Read the .jpg file
+      let image_inputs = await processor(image);
+      let { image_embeds } = await vision_model(image_inputs);
+      let embedArray = Array.from(image_embeds.data);
+      // console.log('title', page.title);
+      embeds.push({
+        filename: newFilename,
+        title: page.title,
+        tags: page.tags,
+        width: image.width,
+        height: image.height,
+        embed: embedArray,
+      });
+    } catch (e) {
+      console.log(e);
+    }
   }
 }
 
