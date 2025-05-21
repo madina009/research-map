@@ -60,10 +60,11 @@ def get_image_urls_for_page(page_id):
 
 
 def get_page_content(page_id):
-    url = f"https://api.notion.com/v1/blocks/{page_id}/children"
+    url = f"https://api.notion.com/v1/blocks/{page_id}/children?page_size=1000"
     response = requests.get(url, headers=headers)
     data = response.json()
     page_items = []
+    print(f"page {page_id} results {len(data["results"])}")
     for child in data["results"]:
         child_id = child["id"]
         child_type = child["type"]
