@@ -3,6 +3,7 @@ import requests
 from dotenv import load_dotenv
 from urllib.parse import urlparse
 import json
+import re
 
 load_dotenv()
 
@@ -26,7 +27,7 @@ def make_notion_request(method, url, **kwargs):
     """Helper function to make requests to the Notion API and handle errors."""
     try:
         response = requests.request(method, url, headers=HEADERS, **kwargs)
-        response.raise_for_status()  # Raises an HTTPError for bad responses (4XX or 5XX)
+        response.raise_for_status()
         return response.json()
     except requests.exceptions.HTTPError as http_err:
         print(f"HTTP error occurred: {http_err} - {response.text}")
@@ -50,7 +51,6 @@ def get_database_items():
     all_results = []
     next_cursor = None
     page_count = 0
-
     print("Starting to fetch database items...")
     while True:
         page_count += 1
@@ -71,10 +71,9 @@ def get_database_items():
         has_more = response_data.get("has_more", False)
 
         if not has_more or not next_cursor:
-            print(f"Finished fetching database items. Total query pages fetched: {page_count}, Total page entries retrieved: {len(all_results)}")
+            print(f"Finished fetching database items. Total query pages: {page_count}, Total page entries: {len(all_results)}")
             break
-
-    return {"results": all_results, "object": "list", "has_more": False, "next_cursor": None}
+    return {"results": all_results}
 
 
 def get_property_details(page_id, property_name_or_id):
@@ -92,29 +91,26 @@ def get_tags_for_page(page_id):
     return [tag["name"] for tag in data["multi_select"]]
 
 
-def get_block_children(block_id, start_cursor=None):
-    """Retrieves child blocks for a given block, handling pagination."""
-    url = f"https://api.notion.com/v1/blocks/{block_id}/children"
-    params = {"page_size": DEFAULT_PAGE_SIZE}
-    if start_cursor:
-        params["start_cursor"] = start_cursor
-    return make_notion_request("GET", url, params=params)
-
-
-def get_all_block_children(block_id):
-    """Retrieves all child blocks for a given block, iterating through all pages."""
-    all_results = []
-    next_cursor = None
+def get_all_block_children(block_id, start_cursor=None):
+    """Retrieves all child blocks for a given block, handling pagination."""
+    all_block_children_results = []
+    current_start_cursor = start_cursor
     while True:
-        data = get_block_children(block_id, start_cursor=next_cursor)
+        url = f"https://api.notion.com/v1/blocks/{block_id}/children"
+        params = {"page_size": DEFAULT_PAGE_SIZE}
+        if current_start_cursor:
+            params["start_cursor"] = current_start_cursor
+
+        data = make_notion_request("GET", url, params=params)
+
         if not data or "results" not in data:
             print(f"Failed to retrieve block children for {block_id} or data is malformed.")
             break
-        all_results.extend(data["results"])
-        next_cursor = data.get("next_cursor")
-        if not next_cursor:
+        all_block_children_results.extend(data["results"])
+        current_start_cursor = data.get("next_cursor")
+        if not current_start_cursor:
             break
-    return all_results
+    return all_block_children_results
 
 
 def parse_rich_text(rich_text_items):
@@ -126,108 +122,103 @@ def parse_rich_text(rich_text_items):
     return full_text.strip()
 
 
-def get_all_image_urls_from_block_tree(start_block_id):
+def generate_image_filename(image_url, block_id):
+    """Generates a filename for an image, trying to use its original name or a unique ID."""
+    try:
+        parsed_url = urlparse(image_url)
+        basename = os.path.basename(parsed_url.path)
+        if basename and '.' in basename: # Has a filename and extension
+             # Sanitize basename to remove problematic characters for filenames
+            sanitized_basename = re.sub(r'[\\/*?:"<>|]', "_", basename)
+            # Ensure it's not too long
+            name_part, ext_part = os.path.splitext(sanitized_basename)
+            return f"{name_part[:50]}{ext_part}" # Limit name part length
+        # Fallback if no clear filename in URL path
+        # Try to get a somewhat descriptive name from the URL if possible
+        url_parts = image_url.split('/')
+        potential_name = url_parts[-2] if len(url_parts) > 2 else url_parts[-1]
+        sanitized_potential_name = re.sub(r'[\\/*?:"<>|]', "_", potential_name)
+        # Use block_id for uniqueness if the name is too generic or missing
+        return f"image_{block_id}_{sanitized_potential_name[:30]}.jpg" # Default to .jpg
+    except Exception as e:
+        print(f"Error generating filename for URL {image_url}: {e}")
+        return f"image_{block_id}_fallback.jpg"
+
+
+def extract_flat_content_and_collect_images_recursive(block_id, images_to_download_list):
     """
-    Recursively fetches all image URLs starting from a given block ID,
-    traversing through all its children and their children.
+    Recursively extracts flat content (paragraphs, quotes, image placeholders)
+    from a block and its children. Collects image URLs and their generated filenames.
     """
-    all_image_urls = []
-    queue_of_block_ids_to_process = [start_block_id]
-    processed_block_ids = set()
+    flat_content_list = []
 
-    while queue_of_block_ids_to_process:
-        current_parent_block_id = queue_of_block_ids_to_process.pop(0)
+    # Get direct children of the current block_id
+    child_blocks = get_all_block_children(block_id)
 
-        if current_parent_block_id in processed_block_ids:
-            continue
-
-        if current_parent_block_id != start_block_id:
-            processed_block_ids.add(current_parent_block_id)
-
-        child_blocks = get_all_block_children(current_parent_block_id)
-
-        for block in child_blocks:
-            if block["type"] == "image":
-                image_data = block.get("image")
-                image_url = None
-                if image_data:
-                    if image_data.get("file"):
-                        image_url = image_data["file"]["url"]
-                    elif image_data.get("external"):
-                        image_url = image_data["external"]["url"]
-
-                if image_url and image_url not in all_image_urls:
-                    all_image_urls.append(image_url)
-
-            if block.get("has_children"):
-                if block["id"] not in processed_block_ids and block["id"] not in queue_of_block_ids_to_process:
-                    queue_of_block_ids_to_process.append(block["id"])
-
-    return all_image_urls
-
-
-def get_page_content_and_images(page_id):
-    """
-    Retrieves and parses content (paragraphs, quotes from top-level blocks) for a given page,
-    and collects ALL image URLs (including nested ones) for download.
-    Returns a tuple: (page_items_for_json, image_urls_to_download)
-    """
-    image_urls_to_download = get_all_image_urls_from_block_tree(page_id)
-    all_top_level_blocks = get_all_block_children(page_id)
-    page_items_for_json = []
-
-    print(f"Processing page {page_id}, total top-level blocks found: {len(all_top_level_blocks)}")
-    if image_urls_to_download:
-        print(f"Total unique images found (including nested) for page {page_id}: {len(image_urls_to_download)}")
-
-    for block in all_top_level_blocks:
+    for block in child_blocks:
         block_type = block["type"]
-        content = ""
 
         if block_type == "paragraph" and block.get("paragraph", {}).get("rich_text"):
-            content = parse_rich_text(block["paragraph"]["rich_text"])
-            if content:
-                page_items_for_json.append({"type": "paragraph", "text": content})
+            text = parse_rich_text(block["paragraph"]["rich_text"])
+            if text:
+                flat_content_list.append({"type": "paragraph", "text": text})
         elif block_type == "quote" and block.get("quote", {}).get("rich_text"):
-            content = parse_rich_text(block["quote"]["rich_text"])
-            if content:
-                page_items_for_json.append({"type": "quote", "text": content})
+            text = parse_rich_text(block["quote"]["rich_text"])
+            if text:
+                flat_content_list.append({"type": "quote", "text": text})
         elif block_type == "image":
             image_data = block.get("image")
-            image_url_for_filename = None
-            if image_data and image_data.get("file"):
-                image_url_for_filename = image_data["file"]["url"]
-            elif image_data and image_data.get("external"):
-                image_url_for_filename = image_data["external"]["url"]
+            image_url = None
+            if image_data:
+                if image_data.get("file"):
+                    image_url = image_data["file"]["url"]
+                elif image_data.get("external"):
+                    image_url = image_data["external"]["url"]
 
-            if image_url_for_filename:
-                try:
-                    parsed_url = urlparse(image_url_for_filename)
-                    filename = os.path.basename(parsed_url.path)
-                    if not filename:
-                        filename = f"{block['id']}.jpg"
-                    page_items_for_json.append({"type": "image", "filename": filename})
-                except Exception as e:
-                    print(f"Error parsing image URL {image_url_for_filename} for filename in top-level block: {e}")
-                    page_items_for_json.append({"type": "image", "filename": "unknown_image.jpg"})
-    return page_items_for_json, image_urls_to_download
+            if image_url:
+                filename = generate_image_filename(image_url, block["id"])
+                flat_content_list.append({"type": "image", "filename": filename})
+                # Add to download list, ensuring no duplicates based on URL
+                if not any(img_info["url"] == image_url for img_info in images_to_download_list):
+                    images_to_download_list.append({"url": image_url, "filename": filename})
+
+        # If the block has children, recurse
+        if block.get("has_children"):
+            # print(f"Block {block['id']} (type: {block_type}) has children, recursing...")
+            nested_content, _ = extract_flat_content_and_collect_images_recursive(block["id"], images_to_download_list)
+            flat_content_list.extend(nested_content)
+
+    return flat_content_list, images_to_download_list
 
 
-def download_image(url, folder="images"):
-    """Downloads an image from a URL to a specified folder."""
+def get_page_data_and_images_to_download(page_id):
+    """
+    Retrieves all content for a page as a flat list (paragraphs, quotes, images)
+    and a list of all unique images to download with their target filenames.
+    """
+    print(f"Processing page {page_id} for flat content and images...")
+    images_to_download_list = [] # This will be populated by the recursive call
+
+    # For a page, its "children" are the top-level blocks.
+    # The recursive function will start by fetching children of page_id.
+    page_flat_content, all_images_for_page = extract_flat_content_and_collect_images_recursive(page_id, images_to_download_list)
+
+    if all_images_for_page:
+        print(f"Total unique images identified for page {page_id}: {len(all_images_for_page)}")
+
+    return page_flat_content, all_images_for_page
+
+
+def download_image_with_filename(url, filename, folder="images"):
+    """Downloads an image from a URL to a specified folder with a given filename."""
+    filepath = os.path.join(folder, filename)
+
+    if os.path.exists(filepath):
+        print(f"File {filename} already exists in {folder}, skipping download.")
+        return filename
+
+    print(f"Downloading {url} to {filepath}...")
     try:
-        parsed_url = urlparse(url)
-        filename = os.path.basename(parsed_url.path)
-        if not filename:
-            filename = f"image_{url.split('/')[-2] if len(url.split('/')) > 2 else 'downloaded'}.jpg"
-
-        filepath = os.path.join(folder, filename)
-
-        if os.path.exists(filepath):
-            print(f"File {filename} already exists in {folder}, skipping download.")
-            return filename
-
-        print(f"Downloading {filepath}...")
         response = requests.get(url, stream=True)
         response.raise_for_status()
         with open(filepath, "wb") as f:
@@ -244,21 +235,20 @@ def download_image(url, folder="images"):
 
 
 def main():
-    """Main function to orchestrate database download."""
+    """Main function to orchestrate database download, content flattening, and image download."""
     database_data = get_database_items()
     if not database_data or "results" not in database_data:
         print("Failed to retrieve database items or database is empty.")
         return
 
-    all_page_ids = []
+    all_page_ids_processed = []
 
     for page_result in database_data.get("results", []):
         page_id = page_result["id"]
-        all_page_ids.append(page_id)
 
         try:
             title_property = page_result.get("properties", {}).get("Name", {}).get("title", [])
-            if not title_property:
+            if not title_property or not title_property[0]["plain_text"].strip():
                 print(f"Page {page_id} has no 'Name' property or title is empty. Using fallback title.")
                 title = f"Untitled Page - {page_id}"
             else:
@@ -272,39 +262,46 @@ def main():
         tags = get_tags_for_page(page_id)
         print(f"Tags: {tags}")
 
-        page_content_json, image_urls = get_page_content_and_images(page_id)
+        # Get flattened content and list of images to download for this page
+        page_flat_content_list, images_to_download_for_page = get_page_data_and_images_to_download(page_id)
 
-        page_object = {
+        page_object_for_json = {
             "id": page_id,
             "title": title,
             "tags": tags,
-            "content": page_content_json,
+            "content": page_flat_content_list, # This is now the flat list
         }
 
-        page_filename = f"{page_id}.json"
-        filepath = os.path.join("pages", page_filename)
+        page_json_filename = f"{page_id}.json"
+        filepath = os.path.join("pages", page_json_filename)
         try:
             with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(page_object, f, indent=2, ensure_ascii=False)
-            print(f"Saved page content to {filepath}")
+                json.dump(page_object_for_json, f, indent=2, ensure_ascii=False)
+            print(f"Saved flattened page content to {filepath}")
+            all_page_ids_processed.append(page_id) # Add ID for index creation
         except IOError as e:
             print(f"Error writing page content to {filepath}: {e}")
 
-        if image_urls:
-            print(f"Found {len(image_urls)} unique images (including nested) for page {title}.")
-            for img_url in image_urls:
-                download_image(img_url, folder="images")
+        # Download all images identified for the current page
+        if images_to_download_for_page:
+            print(f"Found {len(images_to_download_for_page)} unique images to download for page {title}.")
+            for img_info in images_to_download_for_page:
+                download_image_with_filename(img_info["url"], img_info["filename"], folder="images")
         else:
-            print(f"No images found for page {title}.")
+            print(f"No images found to download for page {title}.")
 
-    page_filenames_for_index = [f"{pid}.json" for pid in all_page_ids]
-    index_filepath = os.path.join("pages", "index.json")
-    try:
-        with open(index_filepath, "w", encoding="utf-8") as f:
-            json.dump(page_filenames_for_index, f, indent=2, ensure_ascii=False)
-        print(f"\nSuccessfully created index file at {index_filepath}")
-    except IOError as e:
-        print(f"Error writing index file to {index_filepath}: {e}")
+    # Create an index file listing all processed page JSON filenames
+    if all_page_ids_processed:
+        page_filenames_for_index = [f"{pid}.json" for pid in all_page_ids_processed]
+        index_filepath = os.path.join("pages", "index.json")
+        try:
+            with open(index_filepath, "w", encoding="utf-8") as f:
+                json.dump(page_filenames_for_index, f, indent=2, ensure_ascii=False)
+            print(f"\nSuccessfully created index file at {index_filepath} with {len(page_filenames_for_index)} entries.")
+        except IOError as e:
+            print(f"Error writing index file to {index_filepath}: {e}")
+    else:
+        print("\nNo pages were processed, so no index file was created.")
 
 if __name__ == "__main__":
     main()

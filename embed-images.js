@@ -10,24 +10,30 @@ const pages = await fs.readdir("pages");
 const embeds = [];
 
 for (const filename of pages) {
-  if (!filename.endsWith(".md")) continue;
+  if (!filename.endsWith(".json")) continue;
   const text = await fs.readFile(`pages/${filename}`);
   const page = JSON.parse(text);
   // console.log(page);
   for (const block of page.content) {
     if (block.type !== "image") continue;
-    const { filename } = block;
-    const url = `images_resized/${filename}`;
-    console.log(url);
+    const { filename } = block; // original filename, e.g., "image.png", "photo.heic"
+
+    // Strip off the original extension from filename and append .jpg for the URL
+    const baseFilename = filename.substring(0, filename.lastIndexOf("."));
+    const url = `images_resized/${baseFilename}.jpg`; // URL will always point to a .jpg file
+
+    console.log(url); // Logs the path to the .jpg file in images_resized
+
+    // Determine the extension from the original filename to decide if we process it
     const extension = filename.split(".").pop().toLowerCase();
     if (["jpg", "jpeg", "png", "gif"].includes(extension)) {
-      let image = await RawImage.read(url);
+      let image = await RawImage.read(url); // Read the .jpg file
       let image_inputs = await processor(image);
       let { image_embeds } = await vision_model(image_inputs);
       let embedArray = Array.from(image_embeds.data);
       // console.log('title', page.title);
       embeds.push({
-        filename,
+        filename, // Store the original filename (e.g., "image.png")
         title: page.title,
         tags: page.tags,
         width: image.width,
