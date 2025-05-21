@@ -17,7 +17,7 @@ for (const filename of pages) {
   for (const block of page.content) {
     if (block.type !== "image") continue;
     const { filename } = block;
-    const url = `images/${filename}`;
+    const url = `images_resized/${filename}`;
     console.log(url);
     const extension = filename.split(".").pop().toLowerCase();
     if (["jpg", "jpeg", "png", "gif"].includes(extension)) {
