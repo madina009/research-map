@@ -90,14 +90,26 @@ function updateDebugVisualization() {
     }
 
     debugCtx.fillText("L", x - 5, y - 20);
+  }
 
-    if (detections.leftHand.gesture) {
-      debugCtx.fillText(
-        `${detections.leftHand.gesture.name} (${detections.leftHand.gesture.confidence.toFixed(2)})`,
-        x - 40,
-        y + 30
-      );
+  // Show left hand gesture even without pinch position
+  if (detections.leftHand.gesture && detections.leftHand.gesture.position) {
+    const x = detections.leftHand.gesture.position.x * debugCanvas.width;
+    const y = detections.leftHand.gesture.position.y * debugCanvas.height;
+
+    // If no pinch position was drawn, draw gesture position
+    if (!detections.leftHand.pinch.position) {
+      debugCtx.beginPath();
+      debugCtx.arc(x, y, 8, 0, 2 * Math.PI);
+      debugCtx.stroke();
+      debugCtx.fillText("L", x - 5, y - 20);
     }
+
+    debugCtx.fillText(
+      `${detections.leftHand.gesture.name} (${detections.leftHand.gesture.confidence.toFixed(2)})`,
+      x - 40,
+      y + 30
+    );
   }
 
   // Right hand
@@ -117,14 +129,29 @@ function updateDebugVisualization() {
     }
 
     debugCtx.fillText("R", x - 5, y - 20);
+  }
 
-    if (detections.rightHand.gesture) {
-      debugCtx.fillText(
-        `${detections.rightHand.gesture.name} (${detections.rightHand.gesture.confidence.toFixed(2)})`,
-        x - 40,
-        y + 30
-      );
+  // Show right hand gesture even without pinch position
+  if (detections.rightHand.gesture && detections.rightHand.gesture.position) {
+    const x = detections.rightHand.gesture.position.x * debugCanvas.width;
+    const y = detections.rightHand.gesture.position.y * debugCanvas.height;
+
+    debugCtx.strokeStyle = "#ff0000";
+    debugCtx.fillStyle = "#ff0000";
+
+    // If no pinch position was drawn, draw gesture position
+    if (!detections.rightHand.pinch.position) {
+      debugCtx.beginPath();
+      debugCtx.arc(x, y, 8, 0, 2 * Math.PI);
+      debugCtx.stroke();
+      debugCtx.fillText("R", x - 5, y - 20);
     }
+
+    debugCtx.fillText(
+      `${detections.rightHand.gesture.name} (${detections.rightHand.gesture.confidence.toFixed(2)})`,
+      x - 40,
+      y + 30
+    );
   }
 }
 
@@ -360,12 +387,8 @@ function translateToCenter(group, startIndex, endIndex) {
 let initialPinchDistance = null;
 let initialCameraZ = null;
 
-// Left hand pinch panning variables
-let lastLeftPinchPosition = null;
-let isPanning = false;
-
-// Right hand pinch orbiting variables
-let lastRightPinchPosition = null;
+// Open palm orbiting variables
+let lastPalmPosition = null;
 let isOrbiting = false;
 
 function animate() {
@@ -402,35 +425,27 @@ function animate() {
       initialPinchDistance = null;
       initialCameraZ = null;
 
-      // Left hand pinch panning
-      if (leftPinching && detections.leftHand.pinch.position) {
-        if (lastLeftPinchPosition && isPanning) {
-          // Calculate movement delta
-          const deltaX = (detections.leftHand.pinch.position.x - lastLeftPinchPosition.x) * 20;
-          const deltaY = (detections.leftHand.pinch.position.y - lastLeftPinchPosition.y) * 20;
-
-          // Pan the camera
-          camera.position.x -= deltaX;
-          camera.position.y += deltaY; // Invert Y for natural movement
-        }
-
-        lastLeftPinchPosition = {
-          x: detections.leftHand.pinch.position.x,
-          y: detections.leftHand.pinch.position.y,
-        };
-        isPanning = true;
-      } else {
-        // Reset panning
-        lastLeftPinchPosition = null;
-        isPanning = false;
+      // Open palm orbiting (either hand with open palm gesture)
+      let palmPosition = null;
+      if (
+        detections.leftHand.gesture &&
+        detections.leftHand.gesture.name === "Open_Palm" &&
+        detections.leftHand.gesture.position
+      ) {
+        palmPosition = detections.leftHand.gesture.position;
+      } else if (
+        detections.rightHand.gesture &&
+        detections.rightHand.gesture.name === "Open_Palm" &&
+        detections.rightHand.gesture.position
+      ) {
+        palmPosition = detections.rightHand.gesture.position;
       }
 
-      // Right hand pinch orbiting
-      if (rightPinching && detections.rightHand.pinch.position) {
-        if (lastRightPinchPosition && isOrbiting) {
+      if (palmPosition) {
+        if (lastPalmPosition && isOrbiting) {
           // Calculate movement delta
-          const deltaX = (detections.rightHand.pinch.position.x - lastRightPinchPosition.x) * Math.PI * 2;
-          const deltaY = (detections.rightHand.pinch.position.y - lastRightPinchPosition.y) * Math.PI * 2;
+          const deltaX = (palmPosition.x - lastPalmPosition.x) * Math.PI * 2;
+          const deltaY = (palmPosition.y - lastPalmPosition.y) * Math.PI * 2;
 
           // Orbit around the sphere
           const sphericalCoords = new THREE.Spherical();
@@ -443,14 +458,14 @@ function animate() {
           camera.lookAt(0, 0, 0);
         }
 
-        lastRightPinchPosition = {
-          x: detections.rightHand.pinch.position.x,
-          y: detections.rightHand.pinch.position.y,
+        lastPalmPosition = {
+          x: palmPosition.x,
+          y: palmPosition.y,
         };
         isOrbiting = true;
       } else {
         // Reset orbiting
-        lastRightPinchPosition = null;
+        lastPalmPosition = null;
         isOrbiting = false;
       }
     }
