@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { Text } from "troika-three-text";
+import { HandDetector } from "./hand_detector.js";
 
 // Either "umap" or "force"
 let layoutMode = "force";
@@ -107,12 +108,52 @@ class ForceLayoutAlgorithm {
       img.position.set(
         sphereRadius * Math.sin(theta) * Math.cos(phi),
         sphereRadius * Math.sin(theta) * Math.sin(phi),
-        sphereRadius * Math.cos(theta),
+        sphereRadius * Math.cos(theta)
       );
       img.lookAt(0, 0, 0);
     }
   }
 }
+
+// Initialize Hand Detector
+const handDetector = new HandDetector();
+let handDetectorReady = false;
+
+// Initialize hand detection
+async function initHandDetector() {
+  const success = await handDetector.initialize();
+  if (success) {
+    const webcamStarted = await handDetector.startWebcam();
+    if (webcamStarted) {
+      handDetectorReady = true;
+      window.handDetectorReady = true;
+      console.log("Hand detector ready for use");
+    }
+  }
+}
+
+// Function to get current hand detections (can be called from anywhere)
+function getDetections() {
+  if (!handDetectorReady) {
+    return {
+      leftHand: { gesture: null, pinch: { isPinching: false, position: null } },
+      rightHand: { gesture: null, pinch: { isPinching: false, position: null } },
+    };
+  }
+  return handDetector.getDetections();
+}
+
+// Expose globals for HTML interface
+window.getDetections = getDetections;
+window.handDetectorReady = false;
+window.layoutMode = layoutMode;
+window.setLayoutMode = function (mode) {
+  if (layoutAlgorithms[mode]) {
+    layoutMode = mode;
+    window.layoutMode = mode;
+    console.log(`Layout mode changed to: ${mode}`);
+  }
+};
 
 const renderer = new THREE.WebGLRenderer();
 // renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -162,19 +203,16 @@ scene.add(light1);
 const sphereRadius = 10;
 //const sphereRadius = 1; - cluster
 
-
-
 const sphereGeometry = new THREE.SphereGeometry(sphereRadius + 0.1, 32, 32);
 //const sphereGeometry = new THREE.SphereGeometry(sphereRadius + 0.1, 5, 5); - more like web
 const sphereMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff, wireframe: true });
 const sphereMesh = new THREE.Mesh(sphereGeometry, sphereMaterial);
 scene.add(sphereMesh);
 
-
 const imagesGroup = new THREE.Group();
 scene.add(imagesGroup);
 
-//camera.position.z = 20; - more outside 
+//camera.position.z = 20; - more outside
 camera.position.z = 10;
 
 function map(v, inMin, inMax, outMin, outMax) {
@@ -196,6 +234,37 @@ function translateToCenter(group, startIndex, endIndex) {
 
 function animate() {
   requestAnimationFrame(animate);
+
+  // Poll hand detections
+  if (handDetectorReady) {
+    const detections = getDetections();
+
+    // Example usage - log pinch events
+    if (detections.leftHand.pinch.isPinching) {
+      console.log("Left hand pinching at:", detections.leftHand.pinch.position);
+    }
+    if (detections.rightHand.pinch.isPinching) {
+      console.log("Right hand pinching at:", detections.rightHand.pinch.position);
+    }
+
+    // Example: Log detected gestures
+    if (detections.leftHand.gesture) {
+      console.log(
+        "Left hand gesture:",
+        detections.leftHand.gesture.name,
+        "confidence:",
+        detections.leftHand.gesture.confidence
+      );
+    }
+    if (detections.rightHand.gesture) {
+      console.log(
+        "Right hand gesture:",
+        detections.rightHand.gesture.name,
+        "confidence:",
+        detections.rightHand.gesture.confidence
+      );
+    }
+  }
 
   const layoutAlgorithm = layoutAlgorithms[layoutMode];
   layoutAlgorithm.step();
@@ -250,6 +319,10 @@ async function load() {
   //   // textMesh.visible = false;
   //   imagesGroup.add(textMesh);
   // }
+
+  // Initialize hand detector
+  initHandDetector();
+
   animate();
 }
 
