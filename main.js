@@ -139,6 +139,11 @@ const light1 = new THREE.DirectionalLight(0xffffff, 1);
 light1.position.set(100, 200, 0);
 scene.add(light1);
 
+//WEIRD BLUE LIGHT SCENE
+// const light1 = new THREE.DirectionalLight(0x0000ff, 255);
+// light1.position.set(1, 2, 0);
+// scene.add(light1);
+
 // const light2 = new THREE.DirectionalLight(0xffffff, 3);
 // light2.position.set(100, 200, 100);
 // scene.add(light2);
@@ -150,21 +155,27 @@ scene.add(light1);
 // const lightHelper = new THREE.DirectionalLightHelper(light1, 5);
 // scene.add(lightHelper);
 
-//GRID SIZE
-// const gridHelper = new THREE.GridHelper(100, 100);
-// scene.add(gridHelper);
+//GRID SIZE - 'world grid'
+//const gridHelper = new THREE.GridHelper(100, 100);
+//scene.add(gridHelper);
 
 const sphereRadius = 10;
+//const sphereRadius = 1; - cluster
+
+
 
 const sphereGeometry = new THREE.SphereGeometry(sphereRadius + 0.1, 32, 32);
-const sphereMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, wireframe: true });
+//const sphereGeometry = new THREE.SphereGeometry(sphereRadius + 0.1, 5, 5); - more like web
+const sphereMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff, wireframe: true });
 const sphereMesh = new THREE.Mesh(sphereGeometry, sphereMaterial);
 scene.add(sphereMesh);
+
 
 const imagesGroup = new THREE.Group();
 scene.add(imagesGroup);
 
-camera.position.z = 5;
+//camera.position.z = 20; - more outside 
+camera.position.z = 10;
 
 function map(v, inMin, inMax, outMin, outMax) {
   return ((v - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
@@ -207,6 +218,7 @@ async function load() {
     const planeGeo = new THREE.PlaneGeometry();
     const planeMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
+      //color: 0x0000ff, - blue color
       side: THREE.DoubleSide,
     });
     // const planeMat = new THREE.MeshBasicMaterial({
@@ -217,7 +229,8 @@ async function load() {
     planeMat.map = textureLoader.load(`images_resized/${image.filename}`);
     const mesh = new THREE.Mesh(planeGeo, planeMat);
     const aspect = image.height / image.width;
-    mesh.scale.x = 2.0;
+    //mesh.scale.x = 0.1; -Star sky
+    mesh.scale.x = 0.8;
     mesh.scale.y = mesh.scale.x * aspect;
 
     mesh.position.x = Math.random() * 10 - 5;
