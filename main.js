@@ -360,6 +360,14 @@ function translateToCenter(group, startIndex, endIndex) {
 let initialPinchDistance = null;
 let initialCameraZ = null;
 
+// Left hand pinch panning variables
+let lastLeftPinchPosition = null;
+let isPanning = false;
+
+// Right hand pinch orbiting variables
+let lastRightPinchPosition = null;
+let isOrbiting = false;
+
 function animate() {
   requestAnimationFrame(animate);
 
@@ -367,21 +375,16 @@ function animate() {
   if (handDetectorReady) {
     const detections = getDetections();
 
-    // Pinch-to-zoom functionality
     const leftPinching = detections.leftHand.pinch.isPinching;
     const rightPinching = detections.rightHand.pinch.isPinching;
-    
-    if (leftPinching && rightPinching && 
-        detections.leftHand.pinch.position && detections.rightHand.pinch.position) {
-      
+
+    // Two-hand pinch-to-zoom (highest priority)
+    if (leftPinching && rightPinching && detections.leftHand.pinch.position && detections.rightHand.pinch.position) {
       // Calculate distance between pinch points
       const leftPos = detections.leftHand.pinch.position;
       const rightPos = detections.rightHand.pinch.position;
-      const currentDistance = Math.sqrt(
-        Math.pow(rightPos.x - leftPos.x, 2) + 
-        Math.pow(rightPos.y - leftPos.y, 2)
-      );
-      
+      const currentDistance = Math.sqrt(Math.pow(rightPos.x - leftPos.x, 2) + Math.pow(rightPos.y - leftPos.y, 2));
+
       if (initialPinchDistance === null) {
         // Start pinch-to-zoom
         initialPinchDistance = currentDistance;
@@ -398,32 +401,58 @@ function animate() {
       // Reset pinch-to-zoom when not both hands pinching
       initialPinchDistance = null;
       initialCameraZ = null;
-    }
 
-    // Example usage - log pinch events
-    if (detections.leftHand.pinch.isPinching) {
-      console.log("Left hand pinching at:", detections.leftHand.pinch.position);
-    }
-    if (detections.rightHand.pinch.isPinching) {
-      console.log("Right hand pinching at:", detections.rightHand.pinch.position);
-    }
+      // Left hand pinch panning
+      if (leftPinching && detections.leftHand.pinch.position) {
+        if (lastLeftPinchPosition && isPanning) {
+          // Calculate movement delta
+          const deltaX = (detections.leftHand.pinch.position.x - lastLeftPinchPosition.x) * 20;
+          const deltaY = (detections.leftHand.pinch.position.y - lastLeftPinchPosition.y) * 20;
 
-    // Example: Log detected gestures
-    if (detections.leftHand.gesture) {
-      console.log(
-        "Left hand gesture:",
-        detections.leftHand.gesture.name,
-        "confidence:",
-        detections.leftHand.gesture.confidence
-      );
-    }
-    if (detections.rightHand.gesture) {
-      console.log(
-        "Right hand gesture:",
-        detections.rightHand.gesture.name,
-        "confidence:",
-        detections.rightHand.gesture.confidence
-      );
+          // Pan the camera
+          camera.position.x -= deltaX;
+          camera.position.y += deltaY; // Invert Y for natural movement
+        }
+
+        lastLeftPinchPosition = {
+          x: detections.leftHand.pinch.position.x,
+          y: detections.leftHand.pinch.position.y,
+        };
+        isPanning = true;
+      } else {
+        // Reset panning
+        lastLeftPinchPosition = null;
+        isPanning = false;
+      }
+
+      // Right hand pinch orbiting
+      if (rightPinching && detections.rightHand.pinch.position) {
+        if (lastRightPinchPosition && isOrbiting) {
+          // Calculate movement delta
+          const deltaX = (detections.rightHand.pinch.position.x - lastRightPinchPosition.x) * Math.PI * 2;
+          const deltaY = (detections.rightHand.pinch.position.y - lastRightPinchPosition.y) * Math.PI * 2;
+
+          // Orbit around the sphere
+          const sphericalCoords = new THREE.Spherical();
+          sphericalCoords.setFromVector3(camera.position);
+
+          sphericalCoords.theta -= deltaX; // Horizontal rotation
+          sphericalCoords.phi = Math.max(0.1, Math.min(Math.PI - 0.1, sphericalCoords.phi + deltaY)); // Vertical rotation with limits
+
+          camera.position.setFromSpherical(sphericalCoords);
+          camera.lookAt(0, 0, 0);
+        }
+
+        lastRightPinchPosition = {
+          x: detections.rightHand.pinch.position.x,
+          y: detections.rightHand.pinch.position.y,
+        };
+        isOrbiting = true;
+      } else {
+        // Reset orbiting
+        lastRightPinchPosition = null;
+        isOrbiting = false;
+      }
     }
   }
 
