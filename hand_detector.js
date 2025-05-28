@@ -12,7 +12,7 @@ export class HandDetector {
     this.lastVideoTime = -1;
     this.lastResults = null;
     this.webcamRunning = false;
-    
+
     // Pinch detection threshold (distance between thumb tip and index tip)
     this.pinchThreshold = 0.05;
   }
@@ -22,7 +22,7 @@ export class HandDetector {
       const vision = await FilesetResolver.forVisionTasks(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
       );
-      
+
       this.gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
         baseOptions: {
           modelAssetPath:
@@ -32,7 +32,7 @@ export class HandDetector {
         runningMode: "VIDEO",
         numHands: 2,
       });
-      
+
       this.isInitialized = true;
       console.log("HandDetector initialized successfully");
       return true;
@@ -55,8 +55,8 @@ export class HandDetector {
     try {
       // Create video element if it doesn't exist
       if (!this.video) {
-        this.video = document.createElement('video');
-        this.video.style.display = 'none'; // Hidden video element
+        this.video = document.createElement("video");
+        this.video.style.display = "none"; // Hidden video element
         this.video.autoplay = true;
         this.video.playsInline = true;
         document.body.appendChild(this.video);
@@ -65,8 +65,8 @@ export class HandDetector {
       const constraints = {
         video: {
           width: { ideal: 640 },
-          height: { ideal: 480 }
-        }
+          height: { ideal: 480 },
+        },
       };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -98,15 +98,15 @@ export class HandDetector {
     // MediaPipe hand landmark indices
     const THUMB_TIP = 4;
     const INDEX_TIP = 8;
-    
+
     if (landmarks.length < 21) return null;
-    
+
     const thumbTip = landmarks[THUMB_TIP];
     const indexTip = landmarks[INDEX_TIP];
-    
+
     const distance = this.calculateDistance(thumbTip, indexTip);
     const isPinching = distance < this.pinchThreshold;
-    
+
     if (isPinching) {
       // Return the midpoint between thumb and index as cursor position
       return {
@@ -114,16 +114,16 @@ export class HandDetector {
         position: {
           x: (thumbTip.x + indexTip.x) / 2,
           y: (thumbTip.y + indexTip.y) / 2,
-          z: (thumbTip.z + indexTip.z) / 2
+          z: (thumbTip.z + indexTip.z) / 2,
         },
-        distance: distance
+        distance: distance,
       };
     }
-    
+
     return {
       isPinching: false,
       position: null,
-      distance: distance
+      distance: distance,
     };
   }
 
@@ -133,12 +133,12 @@ export class HandDetector {
       return {
         leftHand: {
           gesture: null,
-          pinch: { isPinching: false, position: null }
+          pinch: { isPinching: false, position: null },
         },
         rightHand: {
           gesture: null,
-          pinch: { isPinching: false, position: null }
-        }
+          pinch: { isPinching: false, position: null },
+        },
       };
     }
 
@@ -160,22 +160,26 @@ export class HandDetector {
     const detections = {
       leftHand: {
         gesture: null,
-        pinch: { isPinching: false, position: null }
+        pinch: { isPinching: false, position: null },
       },
       rightHand: {
         gesture: null,
-        pinch: { isPinching: false, position: null }
-      }
+        pinch: { isPinching: false, position: null },
+      },
     };
 
     // Process gestures and landmarks
     if (this.lastResults.landmarks && this.lastResults.landmarks.length > 0) {
       for (let i = 0; i < this.lastResults.landmarks.length; i++) {
         const landmarks = this.lastResults.landmarks[i];
-        
+
         // Determine handedness
-        let handedness = 'Unknown';
-        if (this.lastResults.handednesses && this.lastResults.handednesses[i] && this.lastResults.handednesses[i].length > 0) {
+        let handedness = "Unknown";
+        if (
+          this.lastResults.handednesses &&
+          this.lastResults.handednesses[i] &&
+          this.lastResults.handednesses[i].length > 0
+        ) {
           handedness = this.lastResults.handednesses[i][0].displayName;
         }
 
@@ -185,7 +189,7 @@ export class HandDetector {
           const gestureData = this.lastResults.gestures[i][0];
           gesture = {
             name: gestureData.categoryName,
-            confidence: gestureData.score
+            confidence: gestureData.score,
           };
         }
 
@@ -193,10 +197,10 @@ export class HandDetector {
         const pinchData = this.detectPinch(landmarks);
 
         // Assign to correct hand
-        if (handedness === 'Left') {
+        if (handedness === "Left") {
           detections.leftHand.gesture = gesture;
           detections.leftHand.pinch = pinchData;
-        } else if (handedness === 'Right') {
+        } else if (handedness === "Right") {
           detections.rightHand.gesture = gesture;
           detections.rightHand.pinch = pinchData;
         }
@@ -210,12 +214,12 @@ export class HandDetector {
     return {
       leftHand: {
         gesture: null,
-        pinch: { isPinching: false, position: null }
+        pinch: { isPinching: false, position: null },
       },
       rightHand: {
         gesture: null,
-        pinch: { isPinching: false, position: null }
-      }
+        pinch: { isPinching: false, position: null },
+      },
     };
   }
 
@@ -224,7 +228,7 @@ export class HandDetector {
     return {
       x: normalizedCoord.x * screenWidth,
       y: normalizedCoord.y * screenHeight,
-      z: normalizedCoord.z
+      z: normalizedCoord.z,
     };
   }
 
@@ -232,7 +236,7 @@ export class HandDetector {
   stop() {
     if (this.video && this.video.srcObject) {
       const tracks = this.video.srcObject.getTracks();
-      tracks.forEach(track => track.stop());
+      tracks.forEach((track) => track.stop());
       this.video.srcObject = null;
     }
     this.webcamRunning = false;
@@ -241,5 +245,13 @@ export class HandDetector {
   // Set pinch sensitivity (smaller values = more sensitive)
   setPinchThreshold(threshold) {
     this.pinchThreshold = threshold;
+  }
+
+  // Get the video stream for debug purposes
+  getVideoStream() {
+    if (this.video && this.video.srcObject) {
+      return this.video.srcObject;
+    }
+    return null;
   }
 }

@@ -7,6 +7,127 @@ import { HandDetector } from "./hand_detector.js";
 // Either "umap" or "force"
 let layoutMode = "force";
 
+// Check if debug mode is enabled
+const isDebugMode = new URLSearchParams(window.location.search).has("debug");
+
+// Debug elements
+let debugContainer, debugVideo, debugCanvas, debugCtx;
+
+// Initialize debug UI if in debug mode
+function initDebugUI() {
+  if (!isDebugMode) return;
+
+  // Create debug container
+  debugContainer = document.createElement("div");
+  debugContainer.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    width: 320px;
+    height: 240px;
+    z-index: 1000;
+    border: 2px solid #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #000;
+  `;
+
+  // Create video element
+  debugVideo = document.createElement("video");
+  debugVideo.style.cssText = `
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  `;
+  debugVideo.autoplay = true;
+  debugVideo.muted = true;
+
+  // Create canvas overlay
+  debugCanvas = document.createElement("canvas");
+  debugCanvas.width = 320;
+  debugCanvas.height = 240;
+  debugCanvas.style.cssText = `
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  `;
+  debugCtx = debugCanvas.getContext("2d");
+
+  debugContainer.appendChild(debugVideo);
+  debugContainer.appendChild(debugCanvas);
+  document.body.appendChild(debugContainer);
+}
+
+// Update debug visualization
+function updateDebugVisualization() {
+  if (!isDebugMode || !debugCtx || !handDetectorReady) return;
+
+  // Clear canvas
+  debugCtx.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
+
+  const detections = getDetections();
+
+  // Draw hand positions and gestures
+  debugCtx.strokeStyle = "#00ff00";
+  debugCtx.fillStyle = "#00ff00";
+  debugCtx.lineWidth = 2;
+  debugCtx.font = "12px Arial";
+
+  // Left hand
+  if (detections.leftHand.pinch.position) {
+    const x = detections.leftHand.pinch.position.x * debugCanvas.width;
+    const y = detections.leftHand.pinch.position.y * debugCanvas.height;
+
+    debugCtx.beginPath();
+    debugCtx.arc(x, y, detections.leftHand.pinch.isPinching ? 15 : 8, 0, 2 * Math.PI);
+    debugCtx.stroke();
+
+    if (detections.leftHand.pinch.isPinching) {
+      debugCtx.fill();
+    }
+
+    debugCtx.fillText("L", x - 5, y - 20);
+
+    if (detections.leftHand.gesture) {
+      debugCtx.fillText(
+        `${detections.leftHand.gesture.name} (${detections.leftHand.gesture.confidence.toFixed(2)})`,
+        x - 40,
+        y + 30
+      );
+    }
+  }
+
+  // Right hand
+  if (detections.rightHand.pinch.position) {
+    const x = detections.rightHand.pinch.position.x * debugCanvas.width;
+    const y = detections.rightHand.pinch.position.y * debugCanvas.height;
+
+    debugCtx.strokeStyle = "#ff0000";
+    debugCtx.fillStyle = "#ff0000";
+
+    debugCtx.beginPath();
+    debugCtx.arc(x, y, detections.rightHand.pinch.isPinching ? 15 : 8, 0, 2 * Math.PI);
+    debugCtx.stroke();
+
+    if (detections.rightHand.pinch.isPinching) {
+      debugCtx.fill();
+    }
+
+    debugCtx.fillText("R", x - 5, y - 20);
+
+    if (detections.rightHand.gesture) {
+      debugCtx.fillText(
+        `${detections.rightHand.gesture.name} (${detections.rightHand.gesture.confidence.toFixed(2)})`,
+        x - 40,
+        y + 30
+      );
+    }
+  }
+}
+
 const layoutAlgorithms = {};
 
 class UMAPLayoutAlgorithm {
@@ -128,6 +249,9 @@ async function initHandDetector() {
       handDetectorReady = true;
       window.handDetectorReady = true;
       console.log("Hand detector ready for use");
+      if (isDebugMode) {
+        debugVideo.srcObject = handDetector.getVideoStream();
+      }
     }
   }
 }
@@ -232,12 +356,49 @@ function translateToCenter(group, startIndex, endIndex) {
   }
 }
 
+// Pinch-to-zoom variables
+let initialPinchDistance = null;
+let initialCameraZ = null;
+
 function animate() {
   requestAnimationFrame(animate);
 
   // Poll hand detections
   if (handDetectorReady) {
     const detections = getDetections();
+
+    // Pinch-to-zoom functionality
+    const leftPinching = detections.leftHand.pinch.isPinching;
+    const rightPinching = detections.rightHand.pinch.isPinching;
+    
+    if (leftPinching && rightPinching && 
+        detections.leftHand.pinch.position && detections.rightHand.pinch.position) {
+      
+      // Calculate distance between pinch points
+      const leftPos = detections.leftHand.pinch.position;
+      const rightPos = detections.rightHand.pinch.position;
+      const currentDistance = Math.sqrt(
+        Math.pow(rightPos.x - leftPos.x, 2) + 
+        Math.pow(rightPos.y - leftPos.y, 2)
+      );
+      
+      if (initialPinchDistance === null) {
+        // Start pinch-to-zoom
+        initialPinchDistance = currentDistance;
+        initialCameraZ = camera.position.z;
+      } else {
+        // Update zoom based on distance change
+        const distanceRatio = currentDistance / initialPinchDistance;
+        const minZ = 3;
+        const maxZ = 30;
+        const newZ = Math.max(minZ, Math.min(maxZ, initialCameraZ / distanceRatio));
+        camera.position.z = newZ;
+      }
+    } else {
+      // Reset pinch-to-zoom when not both hands pinching
+      initialPinchDistance = null;
+      initialCameraZ = null;
+    }
 
     // Example usage - log pinch events
     if (detections.leftHand.pinch.isPinching) {
@@ -273,6 +434,9 @@ function animate() {
   controls.update();
 
   renderer.render(scene, camera);
+
+  // Update debug visualization
+  updateDebugVisualization();
 }
 
 async function load() {
@@ -322,6 +486,12 @@ async function load() {
 
   // Initialize hand detector
   initHandDetector();
+
+  // Initialize debug UI
+  initDebugUI();
+
+  // Initialize debug UI
+  initDebugUI();
 
   animate();
 }
