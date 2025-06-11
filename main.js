@@ -13,6 +13,12 @@ let layoutMode = "force";
 // Debug mode shows additional visual information for development
 const isDebugMode = true; // new URLSearchParams(window.location.search).has("debug");
 
+// Variables for layout transition
+let isTransitioningLayout = false;
+let transitionStartTime;
+const transitionDuration = 750; // milliseconds for smooth transition
+let capturedOldPositions = [];
+
 // Variables to hold debug UI elements
 let debugContainer, debugVideo, debugCanvas, debugCtx;
 
@@ -215,11 +221,13 @@ class UMAPLayoutAlgorithm {
     if (this.umap.step() === this.nEpochs) {
       this.done = true; // Mark as complete when all epochs done
     }
+    // UMAP's getEmbedding() is relatively stable after initialization for a given dataset
+    // but step() is called to adhere to the pattern.
     return this.umap.getEmbedding();
   }
 
-  // Position images in 3D space based on UMAP results
-  layout(group) {
+  getTargetPositions(group) {
+    const positions = [];
     const projections = this.umap.getEmbedding(); // Get 2D coordinates
 
     // Find the range of coordinates to normalize them
@@ -230,25 +238,30 @@ class UMAPLayoutAlgorithm {
 
     const sceneSize = 20; // Size of our 3D scene
 
-    // Position each image on the sphere surface
     for (let i = 0; i < projections.length; i++) {
-      const image = group.children[i];
-      // Map 2D coordinates to scene coordinates
       const x = map(projections[i][0], minX, maxX, -sceneSize, sceneSize);
       const y = map(projections[i][1], minY, maxY, -sceneSize, sceneSize);
 
-      // Convert to spherical coordinates (angles)
       const phi = (x / sceneSize) * Math.PI;
       const theta = (y / sceneSize) * Math.PI;
 
-      // Convert spherical to 3D Cartesian coordinates
-      image.position.x = sphereRadius * Math.sin(theta) * Math.cos(phi);
-      image.position.y = sphereRadius * Math.sin(theta) * Math.sin(phi);
-      image.position.z = sphereRadius * Math.cos(theta);
-
-      // Make image face toward center of sphere
-      image.lookAt(0, 0, 0);
+      const targetX = sphereRadius * Math.sin(theta) * Math.cos(phi);
+      const targetY = sphereRadius * Math.sin(theta) * Math.sin(phi);
+      const targetZ = sphereRadius * Math.cos(theta);
+      positions.push(new THREE.Vector3(targetX, targetY, targetZ));
     }
+    return positions;
+  }
+
+  // Position images in 3D space based on UMAP results
+  applyLayout(group) {
+    const targetPositions = this.getTargetPositions(group);
+    group.children.forEach((image, i) => {
+      if (targetPositions[i]) {
+        image.position.copy(targetPositions[i]);
+      }
+      image.lookAt(0, 0, 0);
+    });
   }
 }
 
@@ -303,27 +316,33 @@ class ForceLayoutAlgorithm {
     this.simulation.tick();
   }
 
-  // Position images in 3D space based on simulation results
-  layout(group) {
+  getTargetPositions(group) {
+    const positions = [];
     const nodes = this.simulation.nodes();
     for (let i = 0; i < nodes.length; i++) {
-      const img = group.children[i];
       const nx = nodes[i].x; // X position from simulation
       const ny = nodes[i].y; // Y position from simulation
 
-      // Convert 2D simulation coordinates to spherical angles
       const phi = (nx / this.simExtent) * Math.PI * 2;
       const theta = (ny / this.simExtent) * Math.PI * 2;
 
-      // Convert to 3D Cartesian coordinates on sphere surface
-      img.position.set(
-        sphereRadius * Math.sin(theta) * Math.cos(phi),
-        sphereRadius * Math.sin(theta) * Math.sin(phi),
-        sphereRadius * Math.cos(theta)
-      );
-      // Make image face toward center
-      img.lookAt(0, 0, 0);
+      const targetX = sphereRadius * Math.sin(theta) * Math.cos(phi);
+      const targetY = sphereRadius * Math.sin(theta) * Math.sin(phi);
+      const targetZ = sphereRadius * Math.cos(theta);
+      positions.push(new THREE.Vector3(targetX, targetY, targetZ));
     }
+    return positions;
+  }
+
+  // Position images in 3D space based on simulation results
+  applyLayout(group) {
+    const targetPositions = this.getTargetPositions(group);
+    group.children.forEach((img, i) => {
+      if (targetPositions[i]) {
+        img.position.copy(targetPositions[i]);
+      }
+      img.lookAt(0, 0, 0);
+    });
   }
 }
 
@@ -364,6 +383,36 @@ function getDetections() {
 window.getDetections = getDetections;
 window.handDetectorReady = false;
 window.layoutMode = layoutMode;
+
+// Function to toggle layout mode and start transition
+function toggleLayoutMode() {
+  if (isTransitioningLayout) return; // Don't switch if already transitioning
+
+  const newMode = layoutMode === "force" ? "umap" : "force";
+  console.log(`Switching layout from ${layoutMode} to ${newMode}`);
+
+  // Capture current visual positions
+  capturedOldPositions = imagesGroup.children.map(child => child.position.clone());
+
+  layoutMode = newMode;
+  window.layoutMode = newMode; // Update global for inspection
+
+  // The new layout algorithm (currentLayoutAlgorithm in animate) will now be the target.
+  // Its step() and getTargetPositions() will be called in the animate loop.
+
+  isTransitioningLayout = true;
+  transitionStartTime = performance.now();
+}
+
+// Event listener for spacebar to toggle layout
+window.addEventListener('keydown', (event) => {
+  if (event.code === 'Space') {
+    event.preventDefault(); // Prevent page scrolling
+    toggleLayoutMode();
+  }
+});
+
+// Original setLayoutMode function - can be kept or removed if spacebar is primary
 window.setLayoutMode = function (mode) {
   if (layoutAlgorithms[mode]) {
     layoutMode = mode;
@@ -469,20 +518,14 @@ function animate() {
 
       if (initialPinchDistance === null) {
         initialPinchDistance = currentDistance;
-
-        // Store the whole offset vector, not just its length
         initialOffset = camera.position.clone().sub(controls.target);
       } else {
-        const scale = currentDistance / initialPinchDistance; // >1 = fingers apart
-        const newOffset = initialOffset.clone().divideScalar(scale); // shorter = zoom in
-
-        camera.position.copy(controls.target).add(newOffset); // slide along view ray
-        // optional: controls.update(); if you keep the control loop active
+        const scale = currentDistance / initialPinchDistance; 
+        const newOffset = initialOffset.clone().divideScalar(scale);
+        camera.position.copy(controls.target).add(newOffset);
       }
     } else {
-      // Reset pinch-to-zoom when not both hands are pinching
       initialPinchDistance = null;
-
       // Check for open palm orbiting gesture (either hand)
       let palmPosition = null;
       if (
@@ -501,48 +544,67 @@ function animate() {
 
       if (palmPosition) {
         if (lastPalmPosition && isOrbiting) {
-          const rotationSpeed = 3.5; // Adjust for desired orbit speed
+          const rotationSpeed = 3.5; 
           const deltaX = (palmPosition.x - lastPalmPosition.x) * rotationSpeed;
           const deltaY = (palmPosition.y - lastPalmPosition.y) * rotationSpeed;
 
-          // Get camera's current offset from the target
           const offset = new THREE.Vector3().subVectors(camera.position, controls.target);
-
-          // Convert to spherical coordinates
           const spherical = new THREE.Spherical().setFromVector3(offset);
-
-          // Adjust angles:
-          // Palm moves right (deltaX > 0) -> camera orbits left (theta increases)
           spherical.theta += deltaX;
-          // Palm moves down (deltaY > 0) -> camera orbits up (phi decreases)
           spherical.phi -= deltaY;
-
-          // Clamp polar angle to prevent flipping
           spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi));
-
-          // Convert back to Cartesian and update camera position
           offset.setFromSpherical(spherical);
           camera.position.copy(controls.target).add(offset);
-
-          // Ensure the camera continues to look at the target.
-          // OrbitControls will also enforce this on controls.update().
           camera.lookAt(controls.target);
         }
-        // Update state for the next frame
         lastPalmPosition = { x: palmPosition.x, y: palmPosition.y };
         isOrbiting = true;
       } else {
-        // Reset orbiting state when no open palm is detected
         lastPalmPosition = null;
         isOrbiting = false;
       }
     }
   }
 
-  // Update layout algorithm (moves images to new positions)
-  const layoutAlgorithm = layoutAlgorithms[layoutMode];
-  layoutAlgorithm.step(); // Calculate one step of algorithm
-  layoutAlgorithm.layout(imagesGroup); // Apply positions to images
+  // Update layout algorithm
+  const currentLayoutAlgorithm = layoutAlgorithms[layoutMode];
+  currentLayoutAlgorithm.step(); // Update algorithm's internal state
+
+  const newTargetPositions = currentLayoutAlgorithm.getTargetPositions(imagesGroup);
+
+  if (isTransitioningLayout) {
+    const elapsedTime = performance.now() - transitionStartTime;
+    const progress = Math.min(elapsedTime / transitionDuration, 1);
+
+    imagesGroup.children.forEach((child, index) => {
+      if (capturedOldPositions[index] && newTargetPositions[index]) {
+        child.position.lerpVectors(capturedOldPositions[index], newTargetPositions[index], progress);
+      }
+      child.lookAt(0, 0, 0); // Keep looking at center during transition
+    });
+
+    if (progress >= 1) {
+      isTransitioningLayout = false;
+      // Ensure final positions are accurately set
+      imagesGroup.children.forEach((child, index) => {
+        if (newTargetPositions[index]) {
+          child.position.copy(newTargetPositions[index]);
+        }
+        // Ensure lookAt is applied after final position
+        child.lookAt(0, 0, 0);
+      });
+      console.log("Layout transition complete.");
+      capturedOldPositions = []; // Clear old positions
+    }
+  } else {
+    // Normal operation: apply layout directly
+    imagesGroup.children.forEach((child, index) => {
+      if (newTargetPositions[index]) {
+        child.position.copy(newTargetPositions[index]);
+      }
+      child.lookAt(0, 0, 0);
+    });
+  }
 
   // Update orbit controls (handles mouse interaction)
   controls.update();
