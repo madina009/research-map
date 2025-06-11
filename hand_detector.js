@@ -187,9 +187,20 @@ export class HandDetector {
         let gesture = null;
         if (this.lastResults.gestures && this.lastResults.gestures[i] && this.lastResults.gestures[i].length > 0) {
           const gestureData = this.lastResults.gestures[i][0];
+          const WRIST_LANDMARK_INDEX = 0; // Wrist landmark
+          const wristLandmark = landmarks[WRIST_LANDMARK_INDEX];
+
           gesture = {
             name: gestureData.categoryName,
             confidence: gestureData.score,
+            handPosition: wristLandmark
+              ? {
+                  // Add handPosition from wrist landmark
+                  x: wristLandmark.x,
+                  y: wristLandmark.y,
+                  z: wristLandmark.z,
+                }
+              : null,
           };
         }
 

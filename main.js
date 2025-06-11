@@ -102,9 +102,9 @@ function updateDebugVisualization() {
   }
 
   // Show left hand gesture information even without pinch position
-  if (detections.leftHand.gesture && detections.leftHand.gesture.position) {
-    const x = detections.leftHand.gesture.position.x * debugCanvas.width;
-    const y = detections.leftHand.gesture.position.y * debugCanvas.height;
+  if (detections.leftHand.gesture && detections.leftHand.gesture.handPosition) {
+    const x = detections.leftHand.gesture.handPosition.x * debugCanvas.width;
+    const y = detections.leftHand.gesture.handPosition.y * debugCanvas.height;
 
     // If no pinch position was drawn, draw gesture position
     if (!detections.leftHand.pinch.position) {
@@ -143,9 +143,9 @@ function updateDebugVisualization() {
   }
 
   // Show right hand gesture information
-  if (detections.rightHand.gesture && detections.rightHand.gesture.position) {
-    const x = detections.rightHand.gesture.position.x * debugCanvas.width;
-    const y = detections.rightHand.gesture.position.y * debugCanvas.height;
+  if (detections.rightHand.gesture && detections.rightHand.gesture.handPosition) {
+    const x = detections.rightHand.gesture.handPosition.x * debugCanvas.width;
+    const y = detections.rightHand.gesture.handPosition.y * debugCanvas.height;
 
     debugCtx.strokeStyle = "#ff0000";
     debugCtx.fillStyle = "#ff0000";
@@ -163,6 +163,30 @@ function updateDebugVisualization() {
       x - 40,
       y + 30
     );
+  }
+
+  // Open Palm indicators
+  debugCtx.font = "14px Arial";
+  debugCtx.fillStyle = "#FFFF00"; // Yellow for Open Palm indicators
+
+  if (
+    detections.leftHand.gesture &&
+    detections.leftHand.gesture.name === "Open_Palm" &&
+    detections.leftHand.gesture.handPosition
+  ) {
+    const x = detections.leftHand.gesture.handPosition.x * debugCanvas.width;
+    const y = detections.leftHand.gesture.handPosition.y * debugCanvas.height;
+    debugCtx.fillText("L: Open Palm", x - 40, y + 45);
+  }
+
+  if (
+    detections.rightHand.gesture &&
+    detections.rightHand.gesture.name === "Open_Palm" &&
+    detections.rightHand.gesture.handPosition
+  ) {
+    const x = detections.rightHand.gesture.handPosition.x * debugCanvas.width;
+    const y = detections.rightHand.gesture.handPosition.y * debugCanvas.height;
+    debugCtx.fillText("R: Open Palm", x - 40, y + 45);
   }
 }
 
@@ -418,7 +442,6 @@ function translateToCenter(group, startIndex, endIndex) {
 
 // Variables for pinch-to-zoom gesture
 let initialPinchDistance = null; // Distance between hands when pinch started
-let initialCameraZ = null; // Camera position when pinch started
 
 // Variables for open palm orbiting gesture
 let lastPalmPosition = null; // Previous palm position for calculating movement
@@ -459,52 +482,57 @@ function animate() {
     } else {
       // Reset pinch-to-zoom when not both hands are pinching
       initialPinchDistance = null;
-      initialCameraZ = null;
 
       // Check for open palm orbiting gesture (either hand)
       let palmPosition = null;
       if (
         detections.leftHand.gesture &&
         detections.leftHand.gesture.name === "Open_Palm" &&
-        detections.leftHand.gesture.position
+        detections.leftHand.gesture.handPosition
       ) {
-        palmPosition = detections.leftHand.gesture.position;
+        palmPosition = detections.leftHand.gesture.handPosition;
       } else if (
         detections.rightHand.gesture &&
         detections.rightHand.gesture.name === "Open_Palm" &&
-        detections.rightHand.gesture.position
+        detections.rightHand.gesture.handPosition
       ) {
-        palmPosition = detections.rightHand.gesture.position;
+        palmPosition = detections.rightHand.gesture.handPosition;
       }
 
       if (palmPosition) {
         if (lastPalmPosition && isOrbiting) {
-          // Calculate how much the palm has moved
-          const deltaX = (palmPosition.x - lastPalmPosition.x) * Math.PI * 2;
-          const deltaY = (palmPosition.y - lastPalmPosition.y) * Math.PI * 2;
+          const rotationSpeed = 3.5; // Adjust for desired orbit speed
+          const deltaX = (palmPosition.x - lastPalmPosition.x) * rotationSpeed;
+          const deltaY = (palmPosition.y - lastPalmPosition.y) * rotationSpeed;
 
-          // Convert camera position to spherical coordinates for easier rotation
-          const sphericalCoords = new THREE.Spherical();
-          // Set the current distance from center and copy current camera angles
-          sphericalCoords.setFromVector3(camera.position);
+          // Get camera's current offset from the target
+          const offset = new THREE.Vector3().subVectors(camera.position, controls.target);
 
-          // Update the angles based on palm movement
-          sphericalCoords.theta -= deltaX; // Horizontal rotation (left/right)
-          sphericalCoords.phi = Math.max(0.1, Math.min(Math.PI - 0.1, sphericalCoords.phi + deltaY)); // Vertical rotation with limits
+          // Convert to spherical coordinates
+          const spherical = new THREE.Spherical().setFromVector3(offset);
 
-          // Convert back to 3D position and update camera
-          camera.position.setFromSpherical(sphericalCoords);
-          camera.lookAt(0, 0, 0); // Always look at the center
+          // Adjust angles:
+          // Palm moves right (deltaX > 0) -> camera orbits left (theta increases)
+          spherical.theta += deltaX;
+          // Palm moves down (deltaY > 0) -> camera orbits up (phi decreases)
+          spherical.phi -= deltaY;
+
+          // Clamp polar angle to prevent flipping
+          spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi));
+
+          // Convert back to Cartesian and update camera position
+          offset.setFromSpherical(spherical);
+          camera.position.copy(controls.target).add(offset);
+
+          // Ensure the camera continues to look at the target.
+          // OrbitControls will also enforce this on controls.update().
+          camera.lookAt(controls.target);
         }
-
-        // Remember current palm position for next frame
-        lastPalmPosition = {
-          x: palmPosition.x,
-          y: palmPosition.y,
-        };
+        // Update state for the next frame
+        lastPalmPosition = { x: palmPosition.x, y: palmPosition.y };
         isOrbiting = true;
       } else {
-        // Reset orbiting when no open palm detected
+        // Reset orbiting state when no open palm is detected
         lastPalmPosition = null;
         isOrbiting = false;
       }
@@ -517,7 +545,7 @@ function animate() {
   layoutAlgorithm.layout(imagesGroup); // Apply positions to images
 
   // Update orbit controls (handles mouse interaction)
-  // controls.update();
+  controls.update();
 
   // Draw everything to the screen
   renderer.render(scene, camera);
