@@ -11,7 +11,7 @@ let layoutMode = "force";
 
 // Check if we're in debug mode by looking at the URL parameters
 // Debug mode shows additional visual information for development
-const isDebugMode = new URLSearchParams(window.location.search).has("debug");
+const isDebugMode = true; // new URLSearchParams(window.location.search).has("debug");
 
 // Variables to hold debug UI elements
 let debugContainer, debugVideo, debugCanvas, debugCtx;
@@ -26,7 +26,7 @@ function initDebugUI() {
   debugContainer.style.cssText = `
     position: fixed;
     bottom: 20px;
-    left: 20px;
+    right: 20px;
     width: 320px;
     height: 240px;
     z-index: 1000;
@@ -364,6 +364,9 @@ const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerH
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; // Smooth camera movement
 controls.dampingFactor = 0.15; // How smooth the movement is
+// controls.enableZoom = false;
+// controls.minPolarAngle = Math.PI / 2; // 90°
+// controls.maxPolarAngle = Math.PI / 2; // 90°
 
 // Lighting setup
 
@@ -421,6 +424,7 @@ let initialCameraZ = null; // Camera position when pinch started
 let lastPalmPosition = null; // Previous palm position for calculating movement
 let isOrbiting = false; // Whether we're currently in orbit mode
 
+let initialOffset;
 // Main animation loop - runs 60 times per second
 function animate() {
   requestAnimationFrame(animate); // Schedule next frame
@@ -441,16 +445,16 @@ function animate() {
       const currentDistance = Math.sqrt(Math.pow(rightPos.x - leftPos.x, 2) + Math.pow(rightPos.y - leftPos.y, 2));
 
       if (initialPinchDistance === null) {
-        // Start of pinch gesture - remember starting values
         initialPinchDistance = currentDistance;
-        initialCameraZ = camera.position.z;
+
+        // Store the whole offset vector, not just its length
+        initialOffset = camera.position.clone().sub(controls.target);
       } else {
-        // Update zoom based on how much distance has changed
-        const distanceRatio = currentDistance / initialPinchDistance;
-        const minZ = 3; // Closest zoom level
-        const maxZ = 30; // Farthest zoom level
-        const newZ = Math.max(minZ, Math.min(maxZ, initialCameraZ / distanceRatio));
-        camera.position.z = newZ;
+        const scale = currentDistance / initialPinchDistance; // >1 = fingers apart
+        const newOffset = initialOffset.clone().divideScalar(scale); // shorter = zoom in
+
+        camera.position.copy(controls.target).add(newOffset); // slide along view ray
+        // optional: controls.update(); if you keep the control loop active
       }
     } else {
       // Reset pinch-to-zoom when not both hands are pinching
@@ -513,7 +517,7 @@ function animate() {
   layoutAlgorithm.layout(imagesGroup); // Apply positions to images
 
   // Update orbit controls (handles mouse interaction)
-  controls.update();
+  // controls.update();
 
   // Draw everything to the screen
   renderer.render(scene, camera);
