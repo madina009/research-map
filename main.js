@@ -392,7 +392,7 @@ function toggleLayoutMode() {
   console.log(`Switching layout from ${layoutMode} to ${newMode}`);
 
   // Capture current visual positions
-  capturedOldPositions = imagesGroup.children.map(child => child.position.clone());
+  capturedOldPositions = imagesGroup.children.map((child) => child.position.clone());
 
   layoutMode = newMode;
   window.layoutMode = newMode; // Update global for inspection
@@ -405,8 +405,8 @@ function toggleLayoutMode() {
 }
 
 // Event listener for spacebar to toggle layout
-window.addEventListener('keydown', (event) => {
-  if (event.code === 'Space') {
+window.addEventListener("keydown", (event) => {
+  if (event.code === "Space") {
     event.preventDefault(); // Prevent page scrolling
     toggleLayoutMode();
   }
@@ -520,7 +520,7 @@ function animate() {
         initialPinchDistance = currentDistance;
         initialOffset = camera.position.clone().sub(controls.target);
       } else {
-        const scale = currentDistance / initialPinchDistance; 
+        const scale = currentDistance / initialPinchDistance;
         const newOffset = initialOffset.clone().divideScalar(scale);
         camera.position.copy(controls.target).add(newOffset);
       }
@@ -544,7 +544,7 @@ function animate() {
 
       if (palmPosition) {
         if (lastPalmPosition && isOrbiting) {
-          const rotationSpeed = 3.5; 
+          const rotationSpeed = 3.5;
           const deltaX = (palmPosition.x - lastPalmPosition.x) * rotationSpeed;
           const deltaY = (palmPosition.y - lastPalmPosition.y) * rotationSpeed;
 
