@@ -425,6 +425,15 @@ window.setLayoutMode = function (mode) {
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight); // Full screen
 document.body.appendChild(renderer.domElement); // Add to web page
+
+// Handle window resizing
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+window.addEventListener("resize", onWindowResize, false);
+
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 
 // Create the 3D scene (container for all 3D objects)
